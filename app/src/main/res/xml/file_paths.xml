@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Le manuel PDF est copié dans le cache de l'appli avant d'être partagé
+         avec une visionneuse externe via une URI content://. -->
+    <cache-path name="manual" path="manual/" />
+</paths>

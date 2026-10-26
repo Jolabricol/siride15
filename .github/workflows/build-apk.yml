@@ -1,0 +1,74 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # NE PAS utiliser android-actions/setup-android ici : sur les runners
+      # GitHub actuels, cette action peut échouer pendant l'appel à sdkmanager
+      # avant même que Gradle ne soit lancé. Le runner Ubuntu fournit déjà
+      # l'Android SDK. On l'utilise directement.
+      - name: Préparer Android SDK du runner
+        shell: bash
+        run: |
+          set -e
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          if [ -d "$SDK/cmdline-tools/latest/bin" ]; then
+            echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          elif [ -d "$SDK/cmdline-tools/20.0/bin" ]; then
+            echo "$SDK/cmdline-tools/20.0/bin" >> "$GITHUB_PATH"
+          fi
+          echo "SDK=$SDK"
+          test -x "$SDK/platform-tools/adb"
+          find "$SDK/cmdline-tools" -maxdepth 2 -name sdkmanager -type f -print || true
+
+      - name: Accepter les licences Android
+        shell: bash
+        run: |
+          set +o pipefail
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null || true
+
+      - name: Installer Android SDK requis
+        shell: bash
+        run: |
+          set -e
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Vérifier Android SDK
+        shell: bash
+        run: |
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --list_installed | grep -E 'platforms;android-36|build-tools;36.0.0|platform-tools' || true
+
+      - name: Préparer Gradle Wrapper
+        run: chmod +x ./gradlew
+
+      - name: Compiler l'APK debug
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Publier l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Siride-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
